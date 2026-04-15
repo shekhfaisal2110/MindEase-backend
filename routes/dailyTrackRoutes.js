@@ -5,6 +5,32 @@ const DailyEmotionalTracking = require('../models/DailyEmotionalTracking');
 
 router.use(auth);
 
+// PUT /date/:date - Update tracking for any specific date
+router.put('/date/:date', async (req, res) => {
+  try {
+    const date = new Date(req.params.date);
+    date.setHours(0, 0, 0, 0);
+    const track = await DailyEmotionalTracking.findOneAndUpdate(
+      { user: req.user._id, date },
+      {
+        silenceCompleted: req.body.silenceCompleted,
+        affirmationCompleted: req.body.affirmationCompleted,
+        happinessCompleted: req.body.happinessCompleted,
+        exerciseCompleted: req.body.exerciseCompleted,
+        readingCompleted: req.body.readingCompleted,
+        journalingCompleted: req.body.journalingCompleted,
+        affirmationText: req.body.affirmationText,
+        journalingText: req.body.journalingText,
+        notes: req.body.notes,
+      },
+      { new: true, upsert: true }
+    );
+    res.json(track);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Get today's tracking
 router.get('/today', async (req, res) => {
   try {
