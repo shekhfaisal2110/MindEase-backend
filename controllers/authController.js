@@ -1,8 +1,10 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { generateOTP, sendOTPEmail } = require('../utils/emailService');
 
-const generateToken = (userId) => jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
+const generateToken = (userId) => jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '1d' });
+const generateRefreshToken = () => crypto.randomBytes(40).toString('hex');
 
 exports.register = async (req, res) => {
   try {
@@ -26,7 +28,6 @@ exports.register = async (req, res) => {
         existingUser.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
         await existingUser.save();
         
-        // Send OTP (or log in dev mode)
         if (process.env.NODE_ENV === 'production') {
           await sendOTPEmail(email, otp, username);
         } else {
@@ -40,7 +41,7 @@ exports.register = async (req, res) => {
       }
     }
     
-    // Check username uniqueness (across all users)
+    // Check username uniqueness
     const usernameTaken = await User.findOne({ username });
     if (usernameTaken) {
       return res.status(400).json({ message: 'Username already taken' });
@@ -110,13 +111,11 @@ exports.resendOTP = async (req, res) => {
     user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
 
-    // Development mode: just log, don't send real email
     if (process.env.NODE_ENV === 'development') {
       console.log(`\n🔐 DEVELOPMENT MODE (Resend): OTP for ${email} is: ${otp}\n`);
       return res.json({ message: 'OTP resent (check terminal)', userId: user._id });
     }
 
-    // Production: send real email
     await sendOTPEmail(email, otp, user.username);
     res.json({ message: 'OTP resent successfully', userId: user._id });
   } catch (error) {
@@ -127,15 +126,78 @@ exports.resendOTP = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, rememberMe } = req.body;
     const user = await User.findOne({ email });
     if (!user) return res.status(401).json({ message: 'Invalid credentials' });
     if (!user.isVerified) return res.status(401).json({ message: 'Please verify email first' });
     const valid = await user.comparePassword(password);
     if (!valid) return res.status(401).json({ message: 'Invalid credentials' });
 
-    const token = generateToken(user._id);
-    res.json({ message: 'Login successful', token, user: { id: user._id, username: user.username, email: user.email } });
+    // Add login history
+    user.loginHistory.unshift({ email: user.email, timestamp: new Date() });
+    user.loginHistory = user.loginHistory.slice(0, 5);
+
+    if (rememberMe) {
+      user.refreshToken = generateRefreshToken();
+      user.refreshTokenExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    } else {
+      user.refreshToken = null;
+      user.refreshTokenExpires = null;
+    }
+    await user.save();
+
+    const accessToken = generateToken(user._id);
+    res.json({
+      message: 'Login successful',
+      accessToken,
+      refreshToken: user.refreshToken,
+      user: { id: user._id, username: user.username, email: user.email }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.refreshToken = async (req, res) => {
+  try {
+    const { refreshToken, email } = req.body;
+    if (!refreshToken || !email) {
+      return res.status(400).json({ message: 'Missing refresh token or email' });
+    }
+    const user = await User.findOne({ email, refreshToken });
+    if (!user || user.refreshTokenExpires < new Date()) {
+      return res.status(401).json({ message: 'Invalid or expired refresh token' });
+    }
+    const newAccessToken = generateToken(user._id);
+    res.json({ accessToken: newAccessToken });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.getLoginHistory = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('loginHistory');
+    res.json(user.loginHistory);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.checkEmail = async (req, res) => {
+  try {
+    const { email } = req.params;
+    const user = await User.findOne({ email }).select('loginHistory isVerified');
+    if (!user) {
+      return res.json({ exists: false });
+    }
+    // Return last 5 logins (most recent first)
+    const recentLogins = user.loginHistory.slice(0, 5);
+    res.json({
+      exists: true,
+      isVerified: user.isVerified,
+      recentLogins
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
