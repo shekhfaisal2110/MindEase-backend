@@ -25,6 +25,9 @@ app.use('/api/emotion-hourly', require('./routes/emotionHourlyRoutes'));
 app.use('/api/react-response', require('./routes/reactResponseRoutes'));
 app.use('/api/ikigai', require('./routes/ikigaiRoutes'));
 app.use('/api/custom-blocks', require('./routes/customHourBlocks'));
+app.use('/api/activity', require('./routes/activityRoutes'));
+app.use('/api/daily-activity', require('./routes/dailyActivityRoutes'));
+app.use('/api/messages', require('./routes/messageRoutes'));
 
 // Test route (remove after testing)
 app.get('/api/health', (req, res) => res.json({ status: 'OK', message: 'Backend is running' }));

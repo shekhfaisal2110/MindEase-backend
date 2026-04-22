@@ -12,5 +12,6 @@ router.get('/login-history', auth, authController.getLoginHistory);
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
 router.get('/check-email/:email', authController.checkEmail);
+router.get('/admin', auth, authController.getAdmin);
 
 module.exports = router;

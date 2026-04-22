@@ -6,6 +6,7 @@ const { generateOTP, sendOTPEmail } = require('../utils/emailService');
 const generateToken = (userId) => jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '1d' });
 const generateRefreshToken = () => crypto.randomBytes(40).toString('hex');
 
+
 exports.register = async (req, res) => {
   try {
     const { username, email, password, confirmPassword } = req.body;
@@ -13,20 +14,20 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: 'Passwords do not match' });
     }
 
-    // Check if email exists and is verified
-    let existingUser = await User.findOne({ email });
+    // Check if email exists (any status)
+    let existingUserByEmail = await User.findOne({ email });
     
-    if (existingUser) {
-      if (existingUser.isVerified) {
+    if (existingUserByEmail) {
+      if (existingUserByEmail.isVerified) {
         return res.status(400).json({ message: 'Email already registered and verified' });
       } else {
         // Email exists but not verified – update user data and resend OTP
-        existingUser.username = username;
-        existingUser.password = password; // Will be hashed by pre-save hook
+        existingUserByEmail.username = username;
+        existingUserByEmail.password = password;
         const otp = generateOTP();
-        existingUser.otp = otp;
-        existingUser.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
-        await existingUser.save();
+        existingUserByEmail.otp = otp;
+        existingUserByEmail.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+        await existingUserByEmail.save();
         
         if (process.env.NODE_ENV === 'production') {
           await sendOTPEmail(email, otp, username);
@@ -36,18 +37,25 @@ exports.register = async (req, res) => {
         
         return res.status(200).json({
           message: 'Account not verified. New OTP sent to your email.',
-          userId: existingUser._id
+          userId: existingUserByEmail._id
         });
       }
     }
     
-    // Check username uniqueness
-    const usernameTaken = await User.findOne({ username });
+    // Check username uniqueness ONLY among verified users
+    const usernameTaken = await User.findOne({ username, isVerified: true });
     if (usernameTaken) {
-      return res.status(400).json({ message: 'Username already taken' });
+      return res.status(400).json({ message: 'Username already taken by a verified account' });
     }
     
-    // New user
+    // Also check if username is taken by an unverified user – if so, delete that old unverified record and create new one
+    const unverifiedWithSameUsername = await User.findOne({ username, isVerified: false });
+    if (unverifiedWithSameUsername) {
+      // Delete the old unverified record (since it's incomplete)
+      await User.deleteOne({ _id: unverifiedWithSameUsername._id });
+    }
+    
+    // Create new user
     const otp = generateOTP();
     const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
     const user = new User({ username, email, password, otp, otpExpires, isVerified: false });
@@ -237,5 +245,23 @@ exports.resetPassword = async (req, res) => {
     res.json({ message: 'Password reset successful' });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+// Get admin user info (by email from .env)
+exports.getAdmin = async (req, res) => {
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (!adminEmail) {
+      return res.status(500).json({ message: 'Admin email not configured' });
+    }
+    const admin = await User.findOne({ email: adminEmail }).select('_id username email');
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin user not found' });
+    }
+    res.json({ id: admin._id, username: admin.username, email: admin.email });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
