@@ -42,4 +42,40 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// NEW: Get completion dates for a given year+month (unique days with entries)
+router.get('/completion-dates/:year/:month', async (req, res) => {
+  try {
+    const { year, month } = req.params;
+    const start = new Date(year, month - 1, 1);
+    const end = new Date(year, month, 0);
+    const entries = await GratitudeEntry.find({
+      user: req.user._id,
+      date: { $gte: start, $lte: end }
+    }).select('date');
+    const uniqueDates = new Set();
+    entries.forEach(entry => {
+      const dateStr = entry.date.toISOString().split('T')[0];
+      uniqueDates.add(dateStr);
+    });
+    res.json(Array.from(uniqueDates));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// NEW: Get total unique days with entries (for progress bar)
+router.get('/stats', async (req, res) => {
+  try {
+    const entries = await GratitudeEntry.find({ user: req.user._id }).select('date');
+    const uniqueDays = new Set();
+    entries.forEach(entry => {
+      const dateStr = entry.date.toISOString().split('T')[0];
+      uniqueDays.add(dateStr);
+    });
+    res.json({ totalUniqueDays: uniqueDays.size });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;

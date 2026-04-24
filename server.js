@@ -28,6 +28,10 @@ app.use('/api/custom-blocks', require('./routes/customHourBlocks'));
 app.use('/api/activity', require('./routes/activityRoutes'));
 app.use('/api/daily-activity', require('./routes/dailyActivityRoutes'));
 app.use('/api/messages', require('./routes/messageRoutes'));
+app.use('/api/time', require('./routes/timeRoutes'));
+app.use('/api/usage', require('./routes/usageRoutes'));
+app.use('/api/wellbeing', require('./routes/wellbeingRoutes'));
+app.use('/api/user', require('./routes/userRoutes'));
 
 // Test route (remove after testing)
 app.get('/api/health', (req, res) => res.json({ status: 'OK', message: 'Backend is running' }));

@@ -13,7 +13,8 @@ const userSchema = new mongoose.Schema({
     timestamp: { type: Date, default: Date.now }
   }],
   refreshToken: { type: String, default: null },
-  refreshTokenExpires: { type: Date, default: null }
+  refreshTokenExpires: { type: Date, default: null },
+  gratitudeChallengeTarget: { type: Number, default: 33 }
 }, { timestamps: true });
 
 userSchema.pre('save', async function(next) {
