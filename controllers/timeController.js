@@ -114,3 +114,31 @@ exports.getAllEntries = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+// Update a time entry
+exports.updateTimeEntry = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { duration, notes } = req.body;
+    const entry = await TimeEntry.findOneAndUpdate(
+      { _id: id, user: req.user._id },
+      { duration, notes },
+      { new: true }
+    ).populate('person', 'name type');
+    if (!entry) return res.status(404).json({ message: 'Entry not found' });
+    res.json(entry);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Delete a time entry
+exports.deleteTimeEntry = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const entry = await TimeEntry.findOneAndDelete({ _id: id, user: req.user._id });
+    if (!entry) return res.status(404).json({ message: 'Entry not found' });
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};

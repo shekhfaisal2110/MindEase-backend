@@ -17,5 +17,7 @@ router.get('/entries/date/:date', timeController.getEntriesForDate);
 router.post('/entries', timeController.addTimeEntry);
 router.get('/entries/monthly/:year/:month', timeController.getMonthlySummary);
 router.get('/entries/all', timeController.getAllEntries);
+router.put('/entries/:id', timeController.updateTimeEntry);
+router.delete('/entries/:id', timeController.deleteTimeEntry);
 
 module.exports = router;

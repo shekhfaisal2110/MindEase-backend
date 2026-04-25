@@ -5,6 +5,15 @@ const HourlyEmotion = require('../models/HourlyEmotion');
 
 router.use(auth);
 
+router.get('/', async (req, res) => {
+  try {
+    const emotions = await HourlyEmotion.find({ user: req.user._id });
+    res.json(emotions);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Get all emotions for a specific date (YYYY-MM-DD)
 router.get('/date/:date', async (req, res) => {
   try {
