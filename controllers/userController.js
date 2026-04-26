@@ -363,3 +363,17 @@ exports.updateLeaderboardVisibility = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// Admin only – get all users
+exports.getAllUsers = async (req, res) => {
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (req.user.email !== adminEmail) {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+    const users = await User.find().select('username email createdAt').sort({ createdAt: -1 });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};

@@ -71,4 +71,6 @@ router.get('/leaderboard', userController.getLeaderboard);
 router.get('/leaderboard-visibility', userController.getLeaderboardVisibility);
 router.put('/leaderboard-visibility', userController.updateLeaderboardVisibility);
 
+router.get('/admin/users', userController.getAllUsers);
+
 module.exports = router;
