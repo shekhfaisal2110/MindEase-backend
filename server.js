@@ -33,6 +33,7 @@ app.use('/api/usage', require('./routes/usageRoutes'));
 app.use('/api/wellbeing', require('./routes/wellbeingRoutes'));
 app.use('/api/user', require('./routes/userRoutes'));
 app.use('/api/feedback', require('./routes/feedbackRoutes'));
+app.use('/api/contact', require('./routes/contactRoutes'));
 
 // Test route (remove after testing)
 app.get('/api/health', (req, res) => res.json({ status: 'OK', message: 'Backend is running' }));
