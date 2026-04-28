@@ -90,4 +90,68 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// Get daily average intensity for a specific emotion (last 30 days)
+router.get('/emotion-trend/:emotion', async (req, res) => {
+  try {
+    const { emotion } = req.params;
+    const userId = req.user._id;
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const activities = await EmotionalActivity.find({
+      user: userId,
+      emotion: emotion,
+      date: { $gte: thirtyDaysAgo }
+    }).sort({ date: 1 });
+    
+    const dailyMap = {};
+    activities.forEach(act => {
+      const dateStr = act.date.toISOString().split('T')[0];
+      if (!dailyMap[dateStr]) {
+        dailyMap[dateStr] = { totalIntensity: 0, count: 0 };
+      }
+      dailyMap[dateStr].totalIntensity += act.intensity;
+      dailyMap[dateStr].count++;
+    });
+    
+    const trendData = Object.entries(dailyMap).map(([date, data]) => ({
+      date,
+      avgIntensity: data.totalIntensity / data.count
+    })).sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    res.json(trendData);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Get intensity trend for a specific emotion over last 30 days
+router.get('/intensity-trend/:emotion', async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const emotion = decodeURIComponent(req.params.emotion);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const activities = await EmotionalActivity.find({
+      user: userId,
+      emotion: emotion,
+      date: { $gte: thirtyDaysAgo }
+    }).sort({ date: 1 });
+    // Group by date
+    const trend = {};
+    activities.forEach(act => {
+      const dateStr = act.date.toISOString().split('T')[0];
+      if (!trend[dateStr]) trend[dateStr] = { total: 0, count: 0 };
+      trend[dateStr].total += act.intensity;
+      trend[dateStr].count++;
+    });
+    const result = Object.entries(trend).map(([date, data]) => ({
+      date,
+      avgIntensity: parseFloat((data.total / data.count).toFixed(1))
+    }));
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;
