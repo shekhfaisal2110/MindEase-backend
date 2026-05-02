@@ -730,3 +730,97 @@ exports.getAllUsers = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+exports.getBadgeHistory = async (req, res) => {
+  try {
+    const { year, month } = req.query;
+    if (!year || !month) {
+      return res.status(400).json({ message: 'Year and month required' });
+    }
+    const targetDate = new Date(year, month, 0); // last day of month
+    targetDate.setHours(23, 59, 59, 999);
+    const userId = req.user._id;
+
+    // Helper to count documents created on or before targetDate
+    const countDocs = async (model) => {
+      return await model.countDocuments({ user: userId, createdAt: { $lte: targetDate } });
+    };
+
+    const [gratitudeCount, affirmationsCount, therapyCount, lettersCount,
+      emotionalCount, hourlyCount, reactCount] = await Promise.all([
+      GratitudeEntry.countDocuments({ user: userId, createdAt: { $lte: targetDate } }),
+      Affirmation.countDocuments({ user: userId, createdAt: { $lte: targetDate } }),
+      TherapyExercise.countDocuments({ user: userId, createdAt: { $lte: targetDate } }),
+      LetterToSelf.countDocuments({ user: userId, createdAt: { $lte: targetDate } }),
+      EmotionalActivity.countDocuments({ user: userId, createdAt: { $lte: targetDate } }),
+      HourlyEmotion.countDocuments({ user: userId, createdAt: { $lte: targetDate } }),
+      ReactResponse.countDocuments({ user: userId, createdAt: { $lte: targetDate } }),
+    ]);
+
+    // Ikigai items count
+    const ikigaiDoc = await Ikigai.findOne({ user: userId });
+    const ikigaiItems = ikigaiDoc
+      ? (ikigaiDoc.love.length + ikigaiDoc.skill.length + ikigaiDoc.worldNeed.length + ikigaiDoc.earn.length)
+      : 0;
+
+    // UserActivity for points, daily tasks, active days, streak
+    const activities = await UserActivity.find({ user: userId, date: { $lte: targetDate } }).lean();
+    const totalDailyTaskPoints = activities.reduce((sum, a) => sum + (a.breakdown?.dailyTask || 0), 0);
+    const dailyTaskCompletions = Math.floor(totalDailyTaskPoints / 3);
+    const totalPoints = activities.reduce((sum, a) => sum + a.totalPoints, 0);
+
+    // Active days – safely convert date to string
+    const activeDaysSet = new Set();
+    activities.forEach(a => {
+      let dateStr;
+      if (a.date instanceof Date) dateStr = a.date.toISOString().split('T')[0];
+      else dateStr = new Date(a.date).toISOString().split('T')[0];
+      activeDaysSet.add(dateStr);
+    });
+    const activeDays = activeDaysSet.size;
+
+    // Streak calculation
+    let streak = 0;
+    const sortedDates = Array.from(activeDaysSet).sort();
+    let currentStreak = 0;
+    let prevDate = null;
+    for (let i = sortedDates.length - 1; i >= 0; i--) {
+      const dateStr = sortedDates[i];
+      const date = new Date(dateStr);
+      if (!prevDate) {
+        currentStreak = 1;
+        prevDate = date;
+        continue;
+      }
+      const diff = (prevDate - date) / (1000 * 60 * 60 * 24);
+      if (diff === 1) {
+        currentStreak++;
+        prevDate = date;
+      } else break;
+    }
+    streak = currentStreak;
+
+    const totalActivities = gratitudeCount + affirmationsCount + therapyCount + lettersCount +
+      emotionalCount + hourlyCount + reactCount + dailyTaskCompletions + ikigaiItems;
+
+    res.json({
+      asOf: targetDate.toISOString().split('T')[0],
+      streak,
+      totalPoints,
+      totalActivities,
+      activeDays,
+      gratitude: gratitudeCount,
+      affirmations: affirmationsCount,
+      therapy: therapyCount,
+      letters: lettersCount,
+      emotionalCheckIns: emotionalCount,
+      hourlyEmotions: hourlyCount,
+      dailyTaskCompletions,
+      reactResponseEntries: reactCount,
+      ikigaiItems,
+    });
+  } catch (err) {
+    console.error('Error in getBadgeHistory:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
