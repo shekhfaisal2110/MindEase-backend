@@ -824,3 +824,70 @@ exports.getBadgeHistory = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// Check if new month started (first visit after month change)
+exports.checkMonthStart = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const user = await User.findById(userId).select('lastMonthStartNotified');
+    const lastNotified = user.lastMonthStartNotified;
+    const isNewMonth = (!lastNotified || lastNotified !== currentMonth);
+    res.json({ isNewMonth, currentMonth });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+// Check if user should see monthly report notification (once per month)
+exports.checkMonthlyReport = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+    const user = await User.findById(userId).select('lastReportNotifiedMonth');
+    const lastNotified = user.lastReportNotifiedMonth;
+    const shouldShow = !lastNotified || lastNotified !== currentMonth;
+    res.json({ shouldShow, currentMonth });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Mark monthly report as seen (so it won't show again this month)
+exports.acknowledgeMonthlyReport = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    await User.findByIdAndUpdate(userId, { lastReportNotifiedMonth: currentMonth });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Check if a new month has started (for the "New Month Begins" banner)
+exports.checkMonthStart = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const user = await User.findById(userId).select('lastMonthStartNotified');
+    const lastNotified = user.lastMonthStartNotified;
+    const isNewMonth = (!lastNotified || lastNotified !== currentMonth);
+    res.json({ isNewMonth, currentMonth });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Acknowledge month-start banner
+exports.acknowledgeMonthStart = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    await User.findByIdAndUpdate(userId, { lastMonthStartNotified: currentMonth });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};

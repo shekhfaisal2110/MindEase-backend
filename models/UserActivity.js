@@ -61,6 +61,8 @@ const userActivitySchema = new mongoose.Schema({
 userActivitySchema.index({ user: 1, date: 1 }, { unique: true });
 userActivitySchema.index({ date: -1 });
 userActivitySchema.index({ totalPoints: -1 }); // for leaderboard
+userActivitySchema.index({ user: 1, totalPoints: -1 });
+userActivitySchema.index({ user: 1, date: 1 });
 
 // Static method to increment activity point
 userActivitySchema.statics.incrementActivity = async function(userId, activityType, points = 1) {

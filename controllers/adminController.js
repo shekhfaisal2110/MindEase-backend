@@ -418,3 +418,210 @@ exports.getPageViewCounts = async (req, res) => {
     res.status(500).json({ message: err.message }); 
   }
 };
+
+
+// Get all users with their total points and today's points (paginated, sorted by total points desc)
+exports.getUserProgress = async (req, res) => {
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (req.user.email !== adminEmail) {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    // Get all users (only username, email, _id)
+    const users = await User.find()
+      .select('username email _id')
+      .lean()
+      .skip(skip)
+      .limit(limit);
+
+    // Get total points for each user (aggregation)
+    const userIds = users.map(u => u._id);
+    const pointsAgg = await UserActivity.aggregate([
+      { $match: { user: { $in: userIds } } },
+      { $group: { _id: '$user', totalPoints: { $sum: '$totalPoints' } } }
+    ]);
+    const pointsMap = {};
+    pointsAgg.forEach(p => { pointsMap[p._id] = p.totalPoints; });
+
+    // Get today's points for each user (using current date string YYYY-MM-DD)
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayAgg = await UserActivity.aggregate([
+      { $match: { user: { $in: userIds }, date: todayStr } },
+      { $group: { _id: '$user', todayPoints: { $sum: '$totalPoints' } } }
+    ]);
+    const todayMap = {};
+    todayAgg.forEach(t => { todayMap[t._id] = t.todayPoints; });
+
+    // Combine results
+    const combined = users.map(u => ({
+      userId: u._id,
+      username: u.username,
+      email: u.email,
+      totalPoints: pointsMap[u._id] || 0,
+      todayPoints: todayMap[u._id] || 0
+    }));
+
+    // Sort by totalPoints descending (already done by aggregation? But we need pagination before counting total users)
+    combined.sort((a, b) => b.totalPoints - a.totalPoints);
+
+    // Get total user count for pagination (without pagination filter)
+    const totalUsers = await User.countDocuments();
+
+    res.json({
+      users: combined,
+      pagination: { page, limit, total: totalUsers, pages: Math.ceil(totalUsers / limit) }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Get monthly rankings (points earned in a specific month, sorted desc)
+exports.getMonthlyRankings = async (req, res) => {
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (req.user.email !== adminEmail) {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+    const { year, month } = req.query;
+    if (!year || !month) {
+      return res.status(400).json({ message: 'year and month required (e.g., year=2026&month=5)' });
+    }
+    const startStr = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endStr = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
+    // Aggregate points per user in that month
+    const rankings = await UserActivity.aggregate([
+      { $match: { date: { $gte: startStr, $lte: endStr } } },
+      { $group: { _id: '$user', totalPoints: { $sum: '$totalPoints' } } },
+      { $sort: { totalPoints: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'userInfo' } },
+      { $unwind: '$userInfo' },
+      { $project: { userId: '$_id', username: '$userInfo.username', email: '$userInfo.email', totalPoints: 1 } }
+    ]);
+
+    const totalRanked = await UserActivity.distinct('user', { date: { $gte: startStr, $lte: endStr } }).then(d => d.length);
+
+    res.json({
+      rankings,
+      pagination: { page, limit, total: totalRanked, pages: Math.ceil(totalRanked / limit) }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Send a congratulatory message to a specific user (using existing notification system)
+exports.sendCongratulations = async (req, res) => {
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (req.user.email !== adminEmail) {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+    const { userId, title, message } = req.body;
+    if (!userId || !title || !message) {
+      return res.status(400).json({ message: 'userId, title, and message required' });
+    }
+    const Notification = require('../models/Notification');
+    const notification = new Notification({
+      user: userId,
+      title,
+      message,
+      type: 'success',
+      createdBy: req.user._id,
+    });
+    await notification.save();
+    res.json({ success: true, message: 'Congratulations message sent!' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Get users who haven't received welcome notification (paginated)
+exports.getPendingWelcomeUsers = async (req, res) => {
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (req.user.email !== adminEmail) return res.status(403).json({ message: 'Admin only' });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    const [users, total] = await Promise.all([
+      User.find({ welcomeNotificationSent: false })
+        .select('username email createdAt')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      User.countDocuments({ welcomeNotificationSent: false })
+    ]);
+    res.json({ users, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Send welcome notification to specific user (or all pending)
+exports.sendWelcomeNotification = async (req, res) => {
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (req.user.email !== adminEmail) return res.status(403).json({ message: 'Admin only' });
+    const { userId, title, message, sendToAll = false } = req.body;
+    if (!title || !message) return res.status(400).json({ message: 'Title and message required' });
+    const Notification = require('../models/Notification');
+    let targetUsers = [];
+    if (sendToAll) {
+      targetUsers = await User.find({ welcomeNotificationSent: false }).select('_id').lean();
+      targetUsers = targetUsers.map(u => u._id);
+    } else if (userId) {
+      targetUsers = [userId];
+    } else {
+      return res.status(400).json({ message: 'userId required or sendToAll true' });
+    }
+    if (targetUsers.length === 0) return res.json({ message: 'No pending users found' });
+    const notifications = targetUsers.map(uid => ({
+      user: uid,
+      title,
+      message,
+      type: 'success',
+      createdBy: req.user._id,
+    }));
+    await Notification.insertMany(notifications);
+    // Mark these users as welcomed
+    await User.updateMany({ _id: { $in: targetUsers } }, { $set: { welcomeNotificationSent: true } });
+    res.json({ message: `Welcome notification sent to ${targetUsers.length} user(s)` });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Get admin dashboard stats
+exports.getAdminStats = async (req, res) => {
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (req.user.email !== adminEmail) return res.status(403).json({ message: 'Admin only' });
+    const [pendingFeedback, pendingWelcome, pendingContact, totalUsers] = await Promise.all([
+      require('../models/Feedback').countDocuments({ isApproved: false }),
+      require('../models/User').countDocuments({ welcomeNotificationSent: false }),
+      require('../models/ContactMessage').countDocuments({ status: 'pending' }),
+      require('../models/User').countDocuments(),
+    ]);
+    res.json({ pendingFeedback, pendingWelcome, pendingContact, totalUsers });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};

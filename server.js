@@ -146,6 +146,10 @@ app.use('/api/sleep', require('./routes/sleepRoutes'));
 app.use('/api/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/sessions', require('./routes/sessionRoutes'));
 app.use('/api/export', require('./routes/exportRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
+app.use('/api/insights', require('./routes/insightRoutes'));
+app.use('/api/thought-records', require('./routes/thoughtRecordRoutes'));
+app.use('/api/motivation', require('./routes/motivationRoutes'));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Backend is running', timestamp: new Date().toISOString() });

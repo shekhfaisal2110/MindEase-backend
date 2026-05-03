@@ -132,7 +132,10 @@ const userSchema = new mongoose.Schema({
   refreshTokenExpires: { type: Date, default: null },
   
   gratitudeChallengeTarget: { type: Number, default: 33, min: 1, max: 365 },
-  hideFromLeaderboard: { type: Boolean, default: true, index: true }
+  hideFromLeaderboard: { type: Boolean, default: true, index: true },
+  lastReportNotifiedMonth: { type: String, default: null },
+  lastMonthStartNotified: { type: String, default: null },
+  welcomeNotificationSent: { type: Boolean, default: false, index: true }
 }, { timestamps: true });
 
 // Indexes
