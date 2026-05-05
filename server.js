@@ -1,17 +1,66 @@
 // const express = require('express');
 // const mongoose = require('mongoose');
 // const cors = require('cors');
+// const helmet = require('helmet');
+// const compression = require('compression');
+// const morgan = require('morgan');
+// const mongoSanitize = require('express-mongo-sanitize');
+// const rateLimit = require('express-rate-limit');
 // const dotenv = require('dotenv');
 
 // dotenv.config();
 
 // const app = express();
 
-// // Middleware
-// app.use(cors());
-// app.use(express.json());
+// // ========== SECURITY & PERFORMANCE MIDDLEWARE ==========
+// app.use(helmet());
+// app.use(compression());
 
-// // Routes
+// // ========== CORS – allow Netlify & localhost ==========
+// const allowedOrigins = [
+//   'http://localhost:5173',
+//   'http://localhost:5174',
+//   'https://mindease2110.netlify.app',
+//   'https://mindease-admin-2110.netlify.app'
+// ];
+
+// if (process.env.ALLOWED_ORIGINS) {
+//   const envOrigins = process.env.ALLOWED_ORIGINS.split(',');
+//   allowedOrigins.push(...envOrigins);
+// }
+
+// const corsOptions = {
+//   origin: function (origin, callback) {
+//     if (!origin) return callback(null, true);
+//     if (allowedOrigins.indexOf(origin) !== -1) {
+//       callback(null, true);
+//     } else {
+//       console.warn(`CORS blocked: ${origin}`);
+//       callback(new Error('Not allowed by CORS'));
+//     }
+//   },
+//   credentials: true,
+//   optionsSuccessStatus: 200,
+// };
+// app.use(cors(corsOptions));
+
+// if (process.env.NODE_ENV === 'development') {
+//   app.use(morgan('dev'));
+// }
+
+// app.use(express.json({ limit: '10mb' }));
+// app.use(mongoSanitize());
+
+// const globalLimiter = rateLimit({
+//   windowMs: 15 * 60 * 1000,
+//   max: 500,
+//   message: 'Too many requests, please try again later.',
+//   standardHeaders: true,
+//   legacyHeaders: false,
+// });
+// app.use('/api/', globalLimiter);
+
+// // ========== ROUTES ==========
 // app.use('/api/auth', require('./routes/authRoutes'));
 // app.use('/api/tasks', require('./routes/taskRoutes'));
 // app.use('/api/routine', require('./routes/routineRoutes'));
@@ -38,19 +87,71 @@
 // app.use('/api/sleep', require('./routes/sleepRoutes'));
 // app.use('/api/analytics', require('./routes/analyticsRoutes'));
 // app.use('/api/sessions', require('./routes/sessionRoutes'));
+// app.use('/api/export', require('./routes/exportRoutes'));
+// app.use('/api/notifications', require('./routes/notificationRoutes'));
+// app.use('/api/insights', require('./routes/insightRoutes'));
+// app.use('/api/thought-records', require('./routes/thoughtRecordRoutes'));
+// app.use('/api/motivation', require('./routes/motivationRoutes'));
+// app.use('/api/coping-cards', require('./routes/copingCardRoutes'));
+// app.use('/api/behavioral', require('./routes/behavioralActivationRoutes'));
 
-// // Test route (remove after testing)
-// app.get('/api/health', (req, res) => res.json({ status: 'OK', message: 'Backend is running' }));
 
-// // MongoDB Connection
-// mongoose.connect(process.env.MONGODB_URI)
-//   .then(() => console.log('✅ MongoDB connected'))
-//   .catch(err => console.error('❌ MongoDB connection error:', err));
+// app.get('/api/health', (req, res) => {
+//   res.json({ status: 'OK', message: 'Backend is running', timestamp: new Date().toISOString() });
+// });
+
+// // 404 handler
+// app.use((req, res) => {
+//   res.status(404).json({ message: `Route ${req.originalUrl} not found` });
+// });
+
+// // Global error handler
+// app.use((err, req, res, next) => {
+//   console.error('Global error:', err.stack);
+//   const status = err.status || 500;
+//   const message = err.message || 'Internal server error';
+//   res.status(status).json({ message });
+// });
+
+// // ========== DATABASE CONNECTION ==========
+// const connectDB = async () => {
+//   try {
+//     await mongoose.connect(process.env.MONGODB_URI);
+//     console.log('✅ MongoDB connected');
+//   } catch (err) {
+//     console.error('❌ MongoDB connection error:', err);
+//     process.exit(1);
+//   }
+// };
+// connectDB();
+
+// // Graceful shutdown
+// const shutdown = async () => {
+//   console.log('Shutting down gracefully...');
+//   try {
+//     await mongoose.disconnect();
+//     console.log('MongoDB disconnected');
+//     process.exit(0);
+//   } catch (err) {
+//     console.error('Shutdown error:', err);
+//     process.exit(1);
+//   }
+// };
+// process.on('SIGINT', shutdown);
+// process.on('SIGTERM', shutdown);
 
 // const PORT = process.env.PORT || 5000;
-// app.listen(PORT, () => {
-//   console.log(`🚀 Server running on port ${PORT}`);
+// const server = app.listen(PORT, () => {
+//   console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
 // });
+
+// process.on('unhandledRejection', (err) => {
+//   console.error('UNHANDLED REJECTION:', err);
+//   server.close(() => process.exit(1));
+// });
+
+
+
 
 
 
@@ -150,6 +251,8 @@ app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/insights', require('./routes/insightRoutes'));
 app.use('/api/thought-records', require('./routes/thoughtRecordRoutes'));
 app.use('/api/motivation', require('./routes/motivationRoutes'));
+app.use('/api/coping-cards', require('./routes/copingCardRoutes'));
+app.use('/api/behavioral', require('./routes/behavioralActivationRoutes'));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Backend is running', timestamp: new Date().toISOString() });
@@ -168,11 +271,17 @@ app.use((err, req, res, next) => {
   res.status(status).json({ message });
 });
 
-// ========== DATABASE CONNECTION ==========
+// ========== DATABASE CONNECTION (OPTIMIZED) ==========
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log('✅ MongoDB connected');
+    await mongoose.connect(process.env.MONGODB_URI, {
+      maxPoolSize: 50,
+      minPoolSize: 10,
+      socketTimeoutMS: 30000,
+      family: 4,
+      autoIndex: process.env.NODE_ENV !== 'production', // disable autoIndex in production
+    });
+    console.log('✅ MongoDB connected with optimized connection pool');
   } catch (err) {
     console.error('❌ MongoDB connection error:', err);
     process.exit(1);

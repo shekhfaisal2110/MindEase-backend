@@ -1,3 +1,47 @@
+// // controllers/insightController.js
+// const UserInsight = require('../models/UserInsight');
+// const insightService = require('../services/insightService');
+
+// // Get cached insights (generated today) or generate new ones
+// exports.getUserInsights = async (req, res) => {
+//   try {
+//     const userId = req.user._id;
+//     const today = new Date().toISOString().split('T')[0];
+//     let userInsight = await UserInsight.findOne({ user: userId, date: today }).lean();
+//     if (!userInsight) {
+//       // Generate and store
+//       const insights = await insightService.generateInsights(userId);
+//       userInsight = await UserInsight.create({ user: userId, date: today, insights });
+//     }
+//     res.json({ insights: userInsight.insights });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: err.message });
+//   }
+// };
+
+// // Force regenerate insights (e.g., after user requests refresh)
+// exports.regenerateInsights = async (req, res) => {
+//   try {
+//     const userId = req.user._id;
+//     const today = new Date().toISOString().split('T')[0];
+//     const insights = await insightService.generateInsights(userId);
+//     await UserInsight.findOneAndUpdate(
+//       { user: userId, date: today },
+//       { insights },
+//       { upsert: true, new: true }
+//     );
+//     res.json({ insights });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: err.message });
+//   }
+// };
+
+
+
+
+
 // controllers/insightController.js
 const UserInsight = require('../models/UserInsight');
 const insightService = require('../services/insightService');
@@ -7,11 +51,19 @@ exports.getUserInsights = async (req, res) => {
   try {
     const userId = req.user._id;
     const today = new Date().toISOString().split('T')[0];
-    let userInsight = await UserInsight.findOne({ user: userId, date: today }).lean();
+    let userInsight = await UserInsight.findOne(
+      { user: userId, date: today },
+      { insights: 1, _id: 0 }          // projection: only insights
+    ).lean();
+
     if (!userInsight) {
-      // Generate and store
+      // Generate and store atomically
       const insights = await insightService.generateInsights(userId);
-      userInsight = await UserInsight.create({ user: userId, date: today, insights });
+      userInsight = await UserInsight.findOneAndUpdate(
+        { user: userId, date: today },
+        { $set: { insights } },
+        { upsert: true, new: true, lean: true, projection: { insights: 1, _id: 0 } }
+      );
     }
     res.json({ insights: userInsight.insights });
   } catch (err) {
@@ -26,12 +78,12 @@ exports.regenerateInsights = async (req, res) => {
     const userId = req.user._id;
     const today = new Date().toISOString().split('T')[0];
     const insights = await insightService.generateInsights(userId);
-    await UserInsight.findOneAndUpdate(
+    const updated = await UserInsight.findOneAndUpdate(
       { user: userId, date: today },
-      { insights },
-      { upsert: true, new: true }
+      { $set: { insights } },
+      { upsert: true, new: true, lean: true, projection: { insights: 1, _id: 0 } }
     );
-    res.json({ insights });
+    res.json({ insights: updated.insights });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: err.message });

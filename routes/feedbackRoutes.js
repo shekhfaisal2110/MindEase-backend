@@ -3,11 +3,11 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const feedbackController = require('../controllers/feedbackController');
 
-// User routes
-router.post('/submit', auth, feedbackController.submitFeedback);
-router.get('/testimonials', feedbackController.getApproved); // public
+// Public route for approved testimonials
+router.get('/testimonials', feedbackController.getApproved);
 
-// Admin routes (require authentication and admin check in controller)
+// Authenticated routes
+router.post('/', auth, feedbackController.submitFeedback);
 router.get('/admin/all', auth, feedbackController.getAllForAdmin);
 router.put('/admin/approve/:id', auth, feedbackController.approveFeedback);
 router.delete('/admin/reject/:id', auth, feedbackController.rejectFeedback);

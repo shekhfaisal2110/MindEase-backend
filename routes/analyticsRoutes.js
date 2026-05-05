@@ -3,7 +3,7 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const analyticsController = require('../controllers/analyticsController');
 
-// Admin only middleware
+// Admin middleware: checks email against configured ADMIN_EMAIL
 const adminOnly = async (req, res, next) => {
   if (req.user.email !== process.env.ADMIN_EMAIL) {
     return res.status(403).json({ message: 'Admin access required' });
@@ -11,7 +11,8 @@ const adminOnly = async (req, res, next) => {
   next();
 };
 
-// All admin endpoints
+// All analytics endpoints are admin‑only and use the optimised controller
+// (aggregations with $facet, cursor‑based, allowDiskUse: false, etc.)
 router.get('/admin/time-spent', auth, adminOnly, analyticsController.getTimeSpentStats);
 router.get('/admin/top-active-users', auth, adminOnly, analyticsController.getTopActiveUsers);
 router.get('/admin/page-views-by-page', auth, adminOnly, analyticsController.getPageViewsByPage);

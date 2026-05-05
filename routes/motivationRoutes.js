@@ -3,8 +3,10 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const motivationController = require('../controllers/motivationController');
 
-// Public (no auth) – but we still require auth? Let's make it public for viewing, but submission requires auth.
+// Public (no auth) – get approved thoughts
 router.get('/thoughts', motivationController.getApprovedThoughts);
+
+// Authenticated – submit a thought
 router.post('/thoughts', auth, motivationController.submitThought);
 
 // Admin routes
